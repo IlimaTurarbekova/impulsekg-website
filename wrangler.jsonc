@@ -55,7 +55,13 @@
     "database_id": "41a4b922-6e5b-4a45-b507-009570ad91ec"
   }
 ],
-  //
+"r2_buckets": [
+  {
+    "binding": "STORAGE",
+    "bucket_name": "impulsekg-images"
+  }
+],
+  
   // R2 — app.manifest.json "r2": true → env.STORAGE. Shared by preview + prod.
   //   "r2_buckets": [
   //     { "binding": "STORAGE", "bucket_name": "app-slug-placeholder-assets" }
