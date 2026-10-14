@@ -5,6 +5,7 @@ import {
   deleteProduct,
   listProducts,
   saveProduct,
+  uploadProductImage,
 } from '../lib/api/products.functions';
 
 export const Route = createFileRoute('/admin')({
@@ -30,6 +31,7 @@ function Admin() {
   const [items, setItems] = useState<any[]>([]);
   const [form, setForm] = useState<any>(makeBlank());
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   async function refresh() {
     setItems(await listProducts());
@@ -51,6 +53,61 @@ function Admin() {
     }
   }
 
+  async function uploadImage(file: File) {
+    setUploading(true);
+    setError('');
+    setMessage('');
+
+    try {
+      if (!file.type.startsWith('image/')) {
+        throw new Error('Please choose an image file.');
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error('Image is too large. Maximum size is 5 MB.');
+      }
+
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = () => {
+          const result = String(reader.result || '');
+          const comma = result.indexOf(',');
+
+          if (comma === -1) {
+            reject(new Error('Could not read image.'));
+            return;
+          }
+
+          resolve(result.slice(comma + 1));
+        };
+
+        reader.onerror = () => reject(new Error('Could not read image.'));
+        reader.readAsDataURL(file);
+      });
+
+      const result = await uploadProductImage({
+        data: {
+          password,
+          fileName: file.name,
+          contentType: file.type || 'image/jpeg',
+          base64,
+        },
+      });
+
+      setForm((current: any) => ({
+        ...current,
+        image_url: result.url,
+      }));
+
+      setMessage('Image uploaded successfully.');
+    } catch (e: any) {
+      setError(e?.message || 'Could not upload image.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function save() {
     if (!form.brand?.trim() || !form.name?.trim()) {
       setError('Brand and product name are required.');
@@ -69,6 +126,7 @@ function Admin() {
           featured: !!form.featured,
         },
       });
+
       await refresh();
       setForm(makeBlank());
       setMessage('Product saved successfully.');
@@ -105,6 +163,7 @@ function Admin() {
   function edit(product: any) {
     setError('');
     setMessage('');
+
     setForm({
       ...product,
       description: product.description ?? '',
@@ -114,6 +173,7 @@ function Admin() {
       status: product.status ?? 'In stock',
       featured: !!product.featured,
     });
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -165,7 +225,9 @@ function Admin() {
           Brand
           <input
             value={form.brand}
-            onChange={(e) => setForm({ ...form, brand: e.target.value })}
+            onChange={(e) =>
+              setForm({ ...form, brand: e.target.value })
+            }
             placeholder="Wahl"
           />
         </label>
@@ -174,7 +236,9 @@ function Admin() {
           Product name
           <input
             value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            onChange={(e) =>
+              setForm({ ...form, name: e.target.value })
+            }
             placeholder="Product name"
           />
         </label>
@@ -195,17 +259,47 @@ function Admin() {
           Wholesale price
           <input
             value={form.price}
-            onChange={(e) => setForm({ ...form, price: e.target.value })}
+            onChange={(e) =>
+              setForm({ ...form, price: e.target.value })
+            }
             placeholder="Leave blank for price on request"
           />
         </label>
+
+        <div style={{ marginBottom: 20 }}>
+          <label>
+            Product image
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              disabled={uploading || busy}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+
+                if (file) {
+                  uploadImage(file);
+                }
+
+                e.currentTarget.value = '';
+              }}
+            />
+          </label>
+
+          <small>
+            {uploading
+              ? 'Uploading image…'
+              : 'Choose JPG, PNG, WEBP or GIF. Maximum 5 MB.'}
+          </small>
+        </div>
 
         <label>
           Product image URL
           <input
             value={form.image_url}
-            onChange={(e) => setForm({ ...form, image_url: e.target.value })}
-            placeholder="https://..."
+            onChange={(e) =>
+              setForm({ ...form, image_url: e.target.value })
+            }
+            placeholder="Uploaded image URL appears here automatically"
           />
         </label>
 
@@ -213,12 +307,13 @@ function Admin() {
           <div style={{ margin: '8px 0 20px' }}>
             <small>Image preview</small>
             <br />
+
             <img
               src={form.image_url}
               alt=""
               style={{
-                width: 140,
-                height: 140,
+                width: 180,
+                height: 180,
                 objectFit: 'contain',
                 background: '#fff',
                 marginTop: 8,
@@ -231,7 +326,9 @@ function Admin() {
           Badge
           <input
             value={form.badge}
-            onChange={(e) => setForm({ ...form, badge: e.target.value })}
+            onChange={(e) =>
+              setForm({ ...form, badge: e.target.value })
+            }
             placeholder="NEW / BESTSELLER / PRO"
           />
         </label>
@@ -240,7 +337,9 @@ function Admin() {
           Status
           <select
             value={form.status}
-            onChange={(e) => setForm({ ...form, status: e.target.value })}
+            onChange={(e) =>
+              setForm({ ...form, status: e.target.value })
+            }
           >
             <option value="In stock">In stock</option>
             <option value="On request">On request</option>
@@ -259,7 +358,7 @@ function Admin() {
           Featured
         </label>
 
-        <button onClick={save} disabled={busy}>
+        <button onClick={save} disabled={busy || uploading}>
           {busy
             ? 'Saving…'
             : form.id
@@ -275,7 +374,7 @@ function Admin() {
               setError('');
               setMessage('');
             }}
-            disabled={busy}
+            disabled={busy || uploading}
           >
             Cancel edit
           </button>
@@ -292,8 +391,10 @@ function Admin() {
           <div key={p.id}>
             <span>
               <b>{p.brand}</b> · {p.name}
+
               <small>
-                {p.price || 'Price on request'} · {p.status || 'In stock'}
+                {p.price || 'Price on request'} ·{' '}
+                {p.status || 'In stock'}
               </small>
             </span>
 
@@ -301,6 +402,7 @@ function Admin() {
               <button onClick={() => edit(p)} disabled={busy}>
                 Edit
               </button>
+
               <button
                 className="danger"
                 onClick={() => del(p.id)}
